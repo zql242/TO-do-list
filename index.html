@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>任務管理牆 | 待辦事項追蹤</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, 'Segoe UI', 'Helvetica Neue', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255,255,255,0.95);
+            border-radius: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+            padding: 2rem;
+        }
+
+        h1 {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin-bottom: 0.5rem;
+        }
+        h1::before {
+            content: "✅";
+            font-size: 2rem;
+        }
+        .sub {
+            color: #666;
+            border-left: 4px solid #667eea;
+            padding-left: 14px;
+            margin-bottom: 28px;
+            font-weight: 500;
+        }
+
+        /* 表單卡片 */
+        .form-card {
+            background: #f8f9ff;
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border: 1px solid #e0e7ff;
+        }
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .form-group {
+            flex: 1;
+            min-width: 160px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: #4a5568;
+            margin-bottom: 6px;
+        }
+        .form-group label .required {
+            color: #e53e3e;
+        }
+        input, select, textarea {
+            width: 100%;
+            border: 2px solid #e2e8f0;
+            border-radius: 1rem;
+            padding: 10px 14px;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            font-family: inherit;
+            background: white;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.2);
+        }
+        textarea {
+            resize: vertical;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 10px 28px;
+            border-radius: 2rem;
+            font-weight: 600;
+            color: white;
+            cursor: pointer;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            margin-top: 28px;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102,126,234,0.3);
+        }
+
+        /* 過濾列 */
+        .filters-bar {
+            background: white;
+            border-radius: 3rem;
+            padding: 0.8rem 1.5rem;
+            margin-bottom: 1.8rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            border: 1px solid #e2e8f0;
+        }
+        .filter-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .filter-badge {
+            background: #edf2f7;
+            padding: 6px 18px;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #2d3748;
+        }
+        .filter-badge.active-filter {
+            background: #667eea;
+            color: white;
+            box-shadow: 0 2px 8px rgba(102,126,234,0.3);
+        }
+        .filter-badge:hover {
+            background: #cbd5e0;
+        }
+        .counter-info {
+            font-size: 0.8rem;
+            background: #e9ecef;
+            padding: 4px 14px;
+            border-radius: 40px;
+            color: #4a5568;
+        }
+
+        /* 卡片網格 */
+        .records-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1.5rem;
+        }
+        .task-card {
+            background: white;
+            border-radius: 1.5rem;
+            padding: 1.2rem;
+            transition: all 0.2s;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            position: relative;
+        }
+        .task-card.done-card {
+            background: #f1f5f9;
+            opacity: 0.85;
+            border-left: 6px solid #94a3b8;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .priority-badge {
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+        .priority-high { background: #fee2e2; color: #c2410c; }
+        .priority-medium { background: #fff3e3; color: #b45309; }
+        .priority-low { background: #e0f2fe; color: #0369a1; }
+        .status-badge {
+            font-size: 0.7rem;
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-weight: 600;
+        }
+        .status-active {
+            background: #dcfce7;
+            color: #15803d;
+        }
+        .status-done {
+            background: #e2e8f0;
+            color: #475569;
+            text-decoration: line-through;
+        }
+        .task-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin: 10px 0 8px;
+            color: #1e293b;
+            word-break: break-word;
+        }
+        .task-note {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin: 8px 0;
+            line-height: 1.4;
+        }
+        .task-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 12px;
+            font-size: 0.7rem;
+            color: #94a3b8;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .task-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .toggle-btn {
+            background: #eef2ff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 40px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.1s;
+            color: #4338ca;
+            flex: 1;
+        }
+        .toggle-btn:hover {
+            background: #e0e7ff;
+            transform: scale(0.98);
+        }
+        .empty-message {
+            text-align: center;
+            padding: 3rem;
+            background: #f8fafc;
+            border-radius: 1.5rem;
+            color: #64748b;
+            grid-column: 1 / -1;
+        }
+        footer {
+            margin-top: 2rem;
+            text-align: center;
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+        @media (max-width: 640px) {
+            .container { padding: 1rem; }
+            .records-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>任務管理牆 📋</h1>
+    <div class="sub">追蹤待辦事項 · 切換完成狀態 · 雲端保存</div>
+
+    <!-- 新增任務表單 -->
+    <div class="form-card">
+        <div class="form-row">
+            <div class="form-group">
+                <label>📌 任務標題 <span class="required">*</span></label>
+                <input type="text" id="taskTitle" placeholder="例如：完成專案簡報" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>⚡ 優先級 <span class="required">*</span></label>
+                <select id="taskPriority">
+                    <option value="高">🔴 高優先級</option>
+                    <option value="中" selected>🟡 中優先級</option>
+                    <option value="低">🟢 低優先級</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>📝 備註 (可選)</label>
+                <textarea id="taskNote" rows="2" placeholder="額外說明、截止日期或相關連結..."></textarea>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end;">
+            <button id="submitBtn" class="btn-primary">➕ 新增任務</button>
+        </div>
+    </div>
+
+    <!-- 篩選列 -->
+    <div class="filters-bar">
+        <div class="filter-group">
+            <span style="font-size:0.75rem; font-weight:600;">狀態篩選：</span>
+            <div data-filter-type="status" data-value="all" class="filter-badge active-filter">全部</div>
+            <div data-filter-type="status" data-value="active" class="filter-badge">進行中</div>
+            <div data-filter-type="status" data-value="done" class="filter-badge">已完成</div>
+        </div>
+        <div class="counter-info" id="counterTip">📊 即時統計</div>
+    </div>
+
+    <!-- 任務列表區 (使用 grid 顯示) -->
+    <div id="recordsContainer" class="records-grid">
+        <div class="empty-message">✨ 還沒有任何任務，點擊「新增任務」開始 ✨</div>
+    </div>
+    <footer>💾 自動儲存於瀏覽器 | 點擊按鈕切換 active / done 狀態</footer>
+</div>
+
+<script>
+    // ======================== Data Contract ========================
+    // 每筆 record 包含：
+    // - id: string (唯一識別)
+    // - createdAt: string (ISO 8601 格式)
+    // - status: 'active' 或 'done' (預設 active)
+    // - title: string (任務標題，必填)
+    // - priority: '高' | '中' | '低' (必填)
+    // - note: string (備註，可選)
+    // ================================================================
+
+    const STORAGE_KEY = "records";
+    let records = [];                 // 存放所有任務
+    let currentStatusFilter = "all"; // 'all', 'active', 'done'
+
+    // DOM 元素
+    const container = document.getElementById("recordsContainer");
+    const titleInput = document.getElementById("taskTitle");
+    const prioritySelect = document.getElementById("taskPriority");
+    const noteTextarea = document.getElementById("taskNote");
+    const submitBtn = document.getElementById("submitBtn");
+    const counterSpan = document.getElementById("counterTip");
+
+    // ---------- 輔助函數: 防 XSS ----------
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // ---------- 儲存整個 records 到 localStorage ----------
+    function persistToLocal() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    }
+
+    // 1. createRecord(formData) - 根據表單內容建立新 record object
+    function createRecord(formData) {
+        // formData 預期包含 title, priority, note
+        const { title, priority, note } = formData;
+        if (!title || title.trim() === "") {
+            alert("請填寫任務標題！");
+            return null;
+        }
+        const nowISO = new Date().toISOString();
+        const newId = Date.now() + '-' + Math.random().toString(36).substring(2, 10);
+        return {
+            id: newId,
+            createdAt: nowISO,
+            status: "active",          // 預設 active
+            title: title.trim(),
+            priority: priority,        // '高', '中', '低'
+            note: note || ""           // 可選欄位，若無則空字串
+        };
+    }
+
+    // 2. saveData(record) - 新增一筆 record 到 records array，然後寫入 localStorage
+    function saveData(record) {
+        if (!record) return false;
+        records.unshift(record);       // 最新資料顯示在最上面
+        persistToLocal();
+        return true;
+    }
+
+    // 3. loadData() - 從 localStorage 讀取 records array；沒有資料就回傳 []
+    function loadData() {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored);
+                if (Array.isArray(parsed)) {
+                    // 確保每一筆都有必要的欄位，防止舊版格式錯誤
+                    records = parsed.map(item => ({
+                        id: item.id || `fallback_${Date.now()}_${Math.random()}`,
+                        createdAt: item.createdAt || new Date().toISOString(),
+                        status: (item.status === 'done' || item.status === 'active') ? item.status : 'active',
+                        title: item.title || '(無標題)',
+                        priority: ['高', '中', '低'].includes(item.priority) ? item.priority : '中',
+                        note: typeof item.note === 'string' ? item.note : ''
+                    }));
+                } else {
+                    records = [];
+                }
+            } catch(e) {
+                records = [];
+            }
+        } else {
+            records = [];   // 完全沒有寫死示範資料
+        }
+        return records;
+    }
+
+    // 5. updateRecord(id, changes) - 只負責更新一筆 record，然後寫入 localStorage
+    function updateRecord(id, changes) {
+        const index = records.findIndex(r => r.id === id);
+        if (index === -1) return false;
+        records[index] = { ...records[index], ...changes };
+        persistToLocal();
+        return true;
+    }
+
+    // 4. renderList(recordsToShow) - 把 records 顯示到頁面 (使用 grid 樣式)
+    function renderList(recordsToShow) {
+        let dataToRender = recordsToShow;
+        
+        // 如果沒有傳入參數，根據當前 status 過濾條件來篩選
+        if (dataToRender === undefined) {
+            let filtered = [...records];
+            if (currentStatusFilter === "active") {
+                filtered = filtered.filter(r => r.status === "active");
+            } else if (currentStatusFilter === "done") {
+                filtered = filtered.filter(r => r.status === "done");
+            }
+            dataToRender = filtered;
+        }
+        
+        // 按時間由新到舊排序 (createdAt 最新在上)
+        const sorted = [...dataToRender].sort((a, b) => {
+            return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+        
+        if (sorted.length === 0) {
+            container.innerHTML = `<div class="empty-message">📭 沒有符合條件的任務，新增一筆吧！</div>`;
+            counterSpan.innerText = `📊 共 0 筆任務 | 總數 ${records.length}`;
+            return;
+        }
+        
+        let html = "";
+        for (const task of sorted) {
+            const isDone = task.status === "done";
+            const cardClass = isDone ? "done-card" : "";
+            const statusText = isDone ? "✅ 已完成" : "⚡ 進行中";
+            const statusClass = isDone ? "status-done" : "status-active";
+            
+            // 優先級樣式對應
+            let priorityClass = "";
+            if (task.priority === "高") priorityClass = "priority-high";
+            else if (task.priority === "中") priorityClass = "priority-medium";
+            else priorityClass = "priority-low";
+            
+            // 格式化日期顯示
+            let displayDate = "未知時間";
+            try {
+                const dateObj = new Date(task.createdAt);
+                displayDate = `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()} ${dateObj.getHours().toString().padStart(2,'0')}:${dateObj.getMinutes().toString().padStart(2,'0')}`;
+            } catch(e) { displayDate = task.createdAt.substring(0,16); }
+            
+            const noteHtml = task.note ? `<div class="task-note">📎 ${escapeHtml(task.note)}</div>` : "";
+            
+            html += `
+                <div class="task-card ${cardClass}" data-id="${task.id}">
+                    <div class="card-header">
+                        <span class="priority-badge ${priorityClass}">${task.priority} 優先</span>
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="task-title">📌 ${escapeHtml(task.title)}</div>
+                    ${noteHtml}
+                    <div class="task-meta">
+                        <span>🕒 ${displayDate}</span>
+                        <span>#${task.id.slice(-6)}</span>
+                    </div>
+                    <div class="task-actions">
+                        <button class="toggle-btn" data-id="${task.id}" data-action="toggle">${isDone ? '🔄 恢復 active' : '✔️ 標記完成'}</button>
+                    </div>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+        counterSpan.innerText = `📊 顯示 ${sorted.length} 筆 | 總共 ${records.length} 筆任務`;
+        
+        // 綁定切換狀態按鈕事件
+        document.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = btn.getAttribute('data-id');
+                const targetTask = records.find(r => r.id === id);
+                if (targetTask) {
+                    const newStatus = targetTask.status === "active" ? "done" : "active";
+                    updateRecord(id, { status: newStatus });
+                    renderList();   // 重新渲染並保持當前 filter
+                }
+            });
+        });
+    }
+    
+    // ---------- 新增任務流程 ----------
+    function handleAddTask() {
+        const title = titleInput.value;
+        const priority = prioritySelect.value;
+        const note = noteTextarea.value;
+        
+        const formData = { title, priority, note };
+        const newRecord = createRecord(formData);
+        if (!newRecord) return;
+        
+        // 儲存紀錄
+        saveData(newRecord);
+        // 清空表單 (保留優先級預設值，只清空標題和備註)
+        titleInput.value = "";
+        noteTextarea.value = "";
+        // 重置優先級可維持使用者上次選擇，不清也可以
+        // 重新渲染畫面 (根據當前 filter 條件，新增後會顯示在最上方)
+        renderList();
+        // 自動滾動到頂部
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    // ---------- 篩選器監聽 ----------
+    function setupFilters() {
+        const statusFilters = document.querySelectorAll('[data-filter-type="status"]');
+        
+        statusFilters.forEach(el => {
+            el.addEventListener('click', () => {
+                const value = el.getAttribute('data-value');
+                currentStatusFilter = value;
+                // 更新按鈕樣式
+                statusFilters.forEach(btn => btn.classList.remove('active-filter'));
+                el.classList.add('active-filter');
+                renderList();   // 重新依照狀態過濾
+            });
+        });
+    }
+    
+    // ---------- 初始化系統 ----------
+    function init() {
+        loadData();          // 從 localStorage 載入
+        renderList();        // 初次渲染 (全顯示)
+        setupFilters();      // 設定篩選監聽
+        submitBtn.addEventListener('click', handleAddTask);
+        
+        // 額外: 按 Enter (Ctrl+Enter) 快速新增
+        const addShortcut = () => {
+            if (document.activeElement === titleInput && (event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                handleAddTask();
+            }
+        };
+        titleInput.addEventListener('keydown', addShortcut);
+        noteTextarea.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                handleAddTask();
+            }
+        });
+    }
+    
+    // 啟動應用
+    init();
+</script>
+</body>
+</html>
