@@ -1,607 +1,109 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>任務管理牆 | 待辦事項追蹤</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: system-ui, 'Segoe UI', 'Helvetica Neue', sans-serif;
-        }
+const SHEET_NAME = ""; // 留空 = 使用第一個分頁
+const HEADERS = ["ID", "CreatedAt", "Status", "Title", "Priority", "Note"];
 
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 2rem 1rem;
-        }
+function _json(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: rgba(255,255,255,0.95);
-            border-radius: 2rem;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
-            padding: 2rem;
-        }
+function _sheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = SHEET_NAME ? ss.getSheetByName(SHEET_NAME) : ss.getSheets()[0];
+  if (!sheet) throw new Error("No sheet found");
+  return sheet;
+}
 
-        h1 {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 2rem;
-            font-weight: 700;
-            color: #1a1a2e;
-            margin-bottom: 0.5rem;
-        }
-        h1::before {
-            content: "✅";
-            font-size: 2rem;
-        }
-        .sub {
-            color: #666;
-            border-left: 4px solid #667eea;
-            padding-left: 14px;
-            margin-bottom: 28px;
-            font-weight: 500;
-        }
+function _headers(sheet) {
+  const firstCell = sheet.getRange(1, 1).getValue();
+  if (!firstCell) {
+    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    return HEADERS;
+  }
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const missing = HEADERS.filter(function(name) {
+    return !headers.some(function(h) {
+      return String(h).toLowerCase() === String(name).toLowerCase();
+    });
+  });
+  if (missing.length) throw new Error("Missing header: " + missing.join(", "));
+  return headers;
+}
 
-        .form-card {
-            background: #f8f9ff;
-            border-radius: 1.5rem;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            border: 1px solid #e0e7ff;
-        }
-        .form-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-        .form-group {
-            flex: 1;
-            min-width: 160px;
-        }
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            font-size: 0.8rem;
-            color: #4a5568;
-            margin-bottom: 6px;
-        }
-        .form-group label .required {
-            color: #e53e3e;
-        }
-        input, select, textarea {
-            width: 100%;
-            border: 2px solid #e2e8f0;
-            border-radius: 1rem;
-            padding: 10px 14px;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-            font-family: inherit;
-            background: white;
-        }
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102,126,234,0.2);
-        }
-        textarea {
-            resize: vertical;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            padding: 10px 28px;
-            border-radius: 2rem;
-            font-weight: 600;
-            color: white;
-            cursor: pointer;
-            transition: 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.9rem;
-            margin-top: 28px;
-        }
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102,126,234,0.3);
-        }
+function _pick(record, header) {
+  if (record[header] !== undefined) return record[header];
+  const key = Object.keys(record).find(function(k) {
+    return k.toLowerCase() === String(header).toLowerCase();
+  });
+  return key ? record[key] : "";
+}
 
-        .filters-bar {
-            background: white;
-            border-radius: 3rem;
-            padding: 0.8rem 1.5rem;
-            margin-bottom: 1.8rem;
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 15px;
-            border: 1px solid #e2e8f0;
-        }
-        .filter-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            align-items: center;
-        }
-        .filter-badge {
-            background: #edf2f7;
-            padding: 6px 18px;
-            border-radius: 40px;
-            font-size: 0.8rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            color: #2d3748;
-        }
-        .filter-badge.active-filter {
-            background: #667eea;
-            color: white;
-            box-shadow: 0 2px 8px rgba(102,126,234,0.3);
-        }
-        .filter-badge:hover {
-            background: #cbd5e0;
-        }
-        .counter-info {
-            font-size: 0.8rem;
-            background: #e9ecef;
-            padding: 4px 14px;
-            border-radius: 40px;
-            color: #4a5568;
-        }
-
-        .records-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 1.5rem;
-        }
-        .task-card {
-            background: white;
-            border-radius: 1.5rem;
-            padding: 1.2rem;
-            transition: all 0.2s;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            position: relative;
-        }
-        .task-card.done-card {
-            background: #f1f5f9;
-            opacity: 0.85;
-            border-left: 6px solid #94a3b8;
-        }
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 12px;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .priority-badge {
-            padding: 4px 12px;
-            border-radius: 30px;
-            font-size: 0.7rem;
-            font-weight: 700;
-        }
-        .priority-high { background: #fee2e2; color: #c2410c; }
-        .priority-medium { background: #fff3e3; color: #b45309; }
-        .priority-low { background: #e0f2fe; color: #0369a1; }
-        .status-badge {
-            font-size: 0.7rem;
-            padding: 4px 12px;
-            border-radius: 30px;
-            font-weight: 600;
-        }
-        .status-active {
-            background: #dcfce7;
-            color: #15803d;
-        }
-        .status-done {
-            background: #e2e8f0;
-            color: #475569;
-            text-decoration: line-through;
-        }
-        .task-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin: 10px 0 8px;
-            color: #1e293b;
-            word-break: break-word;
-        }
-        .task-note {
-            font-size: 0.85rem;
-            color: #64748b;
-            margin: 8px 0;
-            line-height: 1.4;
-        }
-        .task-meta {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 12px;
-            font-size: 0.7rem;
-            color: #94a3b8;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .task-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 12px;
-        }
-        .toggle-btn {
-            background: #eef2ff;
-            border: none;
-            padding: 6px 14px;
-            border-radius: 40px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: 0.1s;
-            color: #4338ca;
-            flex: 1;
-        }
-        .toggle-btn:hover {
-            background: #e0e7ff;
-            transform: scale(0.98);
-        }
-        .empty-message {
-            text-align: center;
-            padding: 3rem;
-            background: #f8fafc;
-            border-radius: 1.5rem;
-            color: #64748b;
-            grid-column: 1 / -1;
-        }
-        footer {
-            margin-top: 2rem;
-            text-align: center;
-            font-size: 0.7rem;
-            color: #94a3b8;
-        }
-        @media (max-width: 640px) {
-            .container { padding: 1rem; }
-            .records-grid { grid-template-columns: 1fr; }
-        }
-    </style>
-</head>
-<body>
-<div class="container">
-    <h1>任務管理牆 📋</h1>
-    <div class="sub">追蹤待辦事項 · 切換完成狀態 · Google Sheet 同步</div>
-
-    <div class="form-card">
-        <div class="form-row">
-            <div class="form-group">
-                <label>📌 任務標題 <span class="required">*</span></label>
-                <input type="text" id="taskTitle" placeholder="例如：完成專案簡報" autocomplete="off">
-            </div>
-            <div class="form-group">
-                <label>⚡ 優先級 <span class="required">*</span></label>
-                <select id="taskPriority">
-                    <option value="高">🔴 高優先級</option>
-                    <option value="中" selected>🟡 中優先級</option>
-                    <option value="低">🟢 低優先級</option>
-                </select>
-            </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label>📝 備註 (可選)</label>
-                <textarea id="taskNote" rows="2" placeholder="額外說明、截止日期或相關連結..."></textarea>
-            </div>
-        </div>
-        <div style="display: flex; justify-content: flex-end;">
-            <button id="submitBtn" class="btn-primary">➕ 新增任務</button>
-        </div>
-    </div>
-
-    <div class="filters-bar">
-        <div class="filter-group">
-            <span style="font-size:0.75rem; font-weight:600;">狀態篩選：</span>
-            <div data-filter-type="status" data-value="all" class="filter-badge active-filter">全部</div>
-            <div data-filter-type="status" data-value="active" class="filter-badge">進行中</div>
-            <div data-filter-type="status" data-value="done" class="filter-badge">已完成</div>
-        </div>
-        <div class="counter-info" id="counterTip">📊 即時統計</div>
-    </div>
-
-    <div id="recordsContainer" class="records-grid">
-        <div class="empty-message">✨ 正在同步資料... ✨</div>
-    </div>
-    <footer>💾 自動儲存於 Google Sheet + 瀏覽器 | 點擊按鈕切換 active / done 狀態</footer>
-</div>
-
-<script>
-    // ==================== 設定區 ====================
-    // 請將下方的 URL 替換為你的 Apps Script Web App 網址 (以 /exec 結尾)
-    const APPS_SCRIPT_URL = "PASTE_YOUR_APPS_SCRIPT_URL_HERE";  // <--- 這裡要改！
-
-    const STORAGE_KEY = "records";
-    let records = [];                 // 存放所有任務
-    let currentStatusFilter = "all"; // 'all', 'active', 'done'
-
-    // DOM 元素
-    const container = document.getElementById("recordsContainer");
-    const titleInput = document.getElementById("taskTitle");
-    const prioritySelect = document.getElementById("taskPriority");
-    const noteTextarea = document.getElementById("taskNote");
-    const submitBtn = document.getElementById("submitBtn");
-    const counterSpan = document.getElementById("counterTip");
-
-    // ---------- 輔助函數: 防 XSS ----------
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
-
-    // ---------- 儲存整個 records 到 localStorage ----------
-    function persistToLocal() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    }
-
-    // ---------- 從 localStorage 載入 (備用 fallback) ----------
-    function loadFromLocal() {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                if (Array.isArray(parsed)) {
-                    records = parsed.map(item => ({
-                        id: item.id || `fallback_${Date.now()}`,
-                        createdAt: item.createdAt || new Date().toISOString(),
-                        status: (item.status === 'done' || item.status === 'active') ? item.status : 'active',
-                        title: item.title || '(無標題)',
-                        priority: ['高', '中', '低'].includes(item.priority) ? item.priority : '中',
-                        note: typeof item.note === 'string' ? item.note : ''
-                    }));
-                } else {
-                    records = [];
-                }
-            } catch(e) {
-                records = [];
-            }
-        } else {
-            records = [];
-        }
-        return records;
-    }
-
-    // ========== 新增: Google Sheet 操作 ==========
-    // 正規化：將 Sheet 欄位 (大寫開頭) 轉為前端 key
-    function normalizeRecord(sheetRecord) {
-        return {
-            id: sheetRecord.ID || sheetRecord.id || '',
-            createdAt: sheetRecord.CreatedAt || sheetRecord.createdAt || new Date().toISOString(),
-            status: (sheetRecord.Status === 'done' || sheetRecord.Status === 'active') ? sheetRecord.Status : 'active',
-            title: sheetRecord.Title || sheetRecord.title || '(無標題)',
-            priority: (sheetRecord.Priority === '高' || sheetRecord.Priority === '中' || sheetRecord.Priority === '低') ? sheetRecord.Priority : '中',
-            note: sheetRecord.Note || sheetRecord.note || ''
-        };
-    }
-
-    // 從 Google Sheet 讀取所有記錄
-    async function fetchRecordsFromSheet() {
-        try {
-            const response = await fetch(APPS_SCRIPT_URL);
-            const data = await response.json();
-            if (data.ok && Array.isArray(data.records)) {
-                // 將每一筆從 Sheet 格式轉為前端格式
-                return data.records.map(normalizeRecord);
-            } else {
-                throw new Error(data.error || 'Invalid response');
-            }
-        } catch (err) {
-            console.warn('Failed to fetch from Sheet:', err);
-            return null;  // 失敗時由呼叫端 fallback
-        }
-    }
-
-    // 同步到 Google Sheet (create / update)
-    async function syncToSheet(payload) {
-        try {
-            const response = await fetch(APPS_SCRIPT_URL, {
-                method: "POST",
-                headers: { "Content-Type": "text/plain" },
-                body: JSON.stringify(payload)
-            });
-            const result = await response.json();
-            if (!result.ok) {
-                console.error('Sheet sync error:', result.error);
-                return false;
-            }
-            return true;
-        } catch (err) {
-            console.error('Network error during sync:', err);
-            return false;
-        }
-    }
-
-    // ========== 修改: 主要資料函數 ==========
-    // 1. createRecord (不變)
-    function createRecord(formData) {
-        const { title, priority, note } = formData;
-        if (!title || title.trim() === "") {
-            alert("請填寫任務標題！");
-            return null;
-        }
-        return {
-            id: Date.now() + '-' + Math.random().toString(36).substring(2, 10),
-            createdAt: new Date().toISOString(),
-            status: "active",
-            title: title.trim(),
-            priority: priority,
-            note: note || ""
-        };
-    }
-
-    // 2. saveData - 現在會同時寫入 localStorage 並同步到 Sheet
-    async function saveData(record) {
-        if (!record) return false;
-        records.unshift(record);
-        persistToLocal();
-        renderList();  // 立即顯示
-        // 異步同步到 Sheet，不影響 UI
-        await syncToSheet({ action: "create", record: record });
-        return true;
-    }
-
-    // 3. updateRecord - 同時更新 local 和 Sheet
-    async function updateRecord(id, changes) {
-        const index = records.findIndex(r => r.id === id);
-        if (index === -1) return false;
-        records[index] = { ...records[index], ...changes };
-        persistToLocal();
-        renderList();
-        // 異步同步到 Sheet
-        await syncToSheet({ action: "update", id: id, changes: changes });
-        return true;
-    }
-
-    // 4. loadData - 優先從 Sheet 載入，失敗則 fallback 到 localStorage
-    async function loadData() {
-        const sheetRecords = await fetchRecordsFromSheet();
-        if (sheetRecords !== null && sheetRecords.length >= 0) {
-            // 成功從 Sheet 取得
-            records = sheetRecords;
-            // 同時更新 localStorage 做快取
-            persistToLocal();
-            return records;
-        } else {
-            // 離線或 Sheet 錯誤，使用 localStorage 資料
-            console.warn('Using localStorage fallback');
-            loadFromLocal();
-            return records;
-        }
-    }
-
-    // 5. renderList (完全不動，保持原本邏輯)
-    function renderList(recordsToShow) {
-        let dataToRender = recordsToShow;
-        if (dataToRender === undefined) {
-            let filtered = [...records];
-            if (currentStatusFilter === "active") {
-                filtered = filtered.filter(r => r.status === "active");
-            } else if (currentStatusFilter === "done") {
-                filtered = filtered.filter(r => r.status === "done");
-            }
-            dataToRender = filtered;
-        }
-        const sorted = [...dataToRender].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        if (sorted.length === 0) {
-            container.innerHTML = `<div class="empty-message">📭 沒有符合條件的任務，新增一筆吧！</div>`;
-            counterSpan.innerText = `📊 共 0 筆任務 | 總數 ${records.length}`;
-            return;
-        }
-        let html = "";
-        for (const task of sorted) {
-            const isDone = task.status === "done";
-            const cardClass = isDone ? "done-card" : "";
-            const statusText = isDone ? "✅ 已完成" : "⚡ 進行中";
-            const statusClass = isDone ? "status-done" : "status-active";
-            let priorityClass = "";
-            if (task.priority === "高") priorityClass = "priority-high";
-            else if (task.priority === "中") priorityClass = "priority-medium";
-            else priorityClass = "priority-low";
-            let displayDate = "未知時間";
-            try {
-                const dateObj = new Date(task.createdAt);
-                displayDate = `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()} ${dateObj.getHours().toString().padStart(2,'0')}:${dateObj.getMinutes().toString().padStart(2,'0')}`;
-            } catch(e) { displayDate = task.createdAt.substring(0,16); }
-            const noteHtml = task.note ? `<div class="task-note">📎 ${escapeHtml(task.note)}</div>` : "";
-            html += `
-                <div class="task-card ${cardClass}" data-id="${task.id}">
-                    <div class="card-header">
-                        <span class="priority-badge ${priorityClass}">${task.priority} 優先</span>
-                        <span class="status-badge ${statusClass}">${statusText}</span>
-                    </div>
-                    <div class="task-title">📌 ${escapeHtml(task.title)}</div>
-                    ${noteHtml}
-                    <div class="task-meta">
-                        <span>🕒 ${displayDate}</span>
-                        <span>#${task.id.slice(-6)}</span>
-                    </div>
-                    <div class="task-actions">
-                        <button class="toggle-btn" data-id="${task.id}" data-action="toggle">${isDone ? '🔄 恢復 active' : '✔️ 標記完成'}</button>
-                    </div>
-                </div>
-            `;
-        }
-        container.innerHTML = html;
-        counterSpan.innerText = `📊 顯示 ${sorted.length} 筆 | 總共 ${records.length} 筆任務`;
-        document.querySelectorAll('.toggle-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const id = btn.getAttribute('data-id');
-                const targetTask = records.find(r => r.id === id);
-                if (targetTask) {
-                    const newStatus = targetTask.status === "active" ? "done" : "active";
-                    await updateRecord(id, { status: newStatus });
-                }
-            });
+function doGet() {
+  try {
+    const sheet = _sheet();
+    const headers = _headers(sheet);
+    const values = sheet.getDataRange().getValues().slice(1);
+    const records = values
+      .filter(function(row) {
+        return row.some(function(cell) { return cell !== ""; });
+      })
+      .map(function(row) {
+        const record = {};
+        headers.forEach(function(h, i) {
+          record[h] = row[i];
         });
-    }
+        return record;
+      });
+    return _json({ ok: true, records: records });
+  } catch (err) {
+    return _json({ ok: false, error: String(err.message || err) });
+  }
+}
 
-    // ---------- 新增任務流程 ----------
-    async function handleAddTask() {
-        const title = titleInput.value;
-        const priority = prioritySelect.value;
-        const note = noteTextarea.value;
-        const formData = { title, priority, note };
-        const newRecord = createRecord(formData);
-        if (!newRecord) return;
-        await saveData(newRecord);
-        titleInput.value = "";
-        noteTextarea.value = "";
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+function doPost(e) {
+  try {
+    const body = JSON.parse(e.postData.contents || "{}");
+    if (body.action === "create") return _create(body.record || {});
+    if (body.action === "update") return _update(body.id, body.changes || {});
+    return _json({ ok: false, error: "Unknown action" });
+  } catch (err) {
+    return _json({ ok: false, error: String(err.message || err) });
+  }
+}
 
-    // ---------- 篩選器監聽 ----------
-    function setupFilters() {
-        const statusFilters = document.querySelectorAll('[data-filter-type="status"]');
-        statusFilters.forEach(el => {
-            el.addEventListener('click', () => {
-                currentStatusFilter = el.getAttribute('data-value');
-                statusFilters.forEach(btn => btn.classList.remove('active-filter'));
-                el.classList.add('active-filter');
-                renderList();
-            });
+function _create(record) {
+  const sheet = _sheet();
+  const headers = _headers(sheet);
+  const row = headers.map(function(h) {
+    return _pick(record, h);
+  });
+  sheet.appendRow(row);
+  return _json({ ok: true, action: "create" });
+}
+
+function _update(id, changes) {
+  const sheet = _sheet();
+  const headers = _headers(sheet);
+  const values = sheet.getDataRange().getValues();
+  const idIndex = headers.findIndex(function(h) {
+    return String(h).toLowerCase() === "id";
+  });
+  if (idIndex === -1) {
+    return _json({ ok: false, error: "ID column not found in headers" });
+  }
+
+  for (let r = 1; r < values.length; r++) {
+    if (String(values[r][idIndex]) === String(id)) {
+      Object.keys(changes).forEach(function(key) {
+        const header = headers.find(function(h) {
+          return String(h).toLowerCase() === key.toLowerCase();
         });
+        if (header) {
+          sheet.getRange(r + 1, headers.indexOf(header) + 1).setValue(changes[key]);
+        }
+      });
+      return _json({ ok: true, action: "update" });
     }
-
-    // ---------- 初始化 ----------
-    async function init() {
-        await loadData();          // 優先從 Sheet 載入
-        renderList();
-        setupFilters();
-        submitBtn.addEventListener('click', handleAddTask);
-        titleInput.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                e.preventDefault();
-                handleAddTask();
-            }
-        });
-        noteTextarea.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                e.preventDefault();
-                handleAddTask();
-            }
-        });
-    }
-
-    init();
-</script>
-</body>
-</html>
+  }
+  return _json({ ok: false, error: "Record not found" });
+}
